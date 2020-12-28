@@ -86,7 +86,7 @@ function password(){
         do
             read -r -p "Type LDAP DB admin password: " PASS
         done
-	    SHA=$(docker run --rm ${NAME}:${VERSION} /usr/sbin/slappasswd -h {SSHA} -s ${PASS})
+	    SHA=$(docker run --rm --entrypoint "/usr/sbin/slappasswd" ${NAME}:${VERSION} -h {SSHA} -s ${PASS})
 	    echo -en "\nPCS_LDAP_ADM_PWD=$(echo $SHA | base64)\n" >> env_file 
     fi
 }
