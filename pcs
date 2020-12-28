@@ -1,0 +1,164 @@
+#!/bin/bash
+
+NAME=pcs-ldap
+VERSION=1.0.0
+PCS_LDAP_UID=$(id -u openldap 2> /dev/null)
+PCS_LDAP_GID=$(getent group openldap | cut -d ':' -f 3)
+PCS_TLS_GID=$(getent group tls | cut -d ':' -f 3)
+PCS_CERT_FOLDER="/etc/letsencrypt/"
+
+function init-pcs(){
+    if [ ! -f "env_file" ]
+    then
+        echo "env_file don't exist. Please create one by taking env_file.example as source to fill-in value"
+        exit -1
+    fi
+
+    if [ -z "$PCS_LDAP_GID" ]
+    then
+        echo "Openldap group don't exist."
+        while [ -z "${answ}" ]
+        do
+            read -r -p "Create new one ? [y/n]" answ
+        done
+        if [ "${answ}" == "y" ] || [ "${answ}" == "Y" ]
+        then
+            sudo groupadd openldap
+        else
+            echo "Can't continue. Abort !"
+            exit -1
+        fi
+    fi
+
+    if [ -z "$PCS_LDAP_UID" ]
+    then
+        echo "Openldap user don't exist."
+        while [ -z "${answ}" ]
+        do
+            read -r -p "Create new one ? [y/n]" answ
+        done
+        if [ "${answ}" == "y" ] || [ "${answ}" == "Y" ]
+        then
+            sudo useradd -M -N -r -s /bin/false openldap
+            sudo usermod -g openldap openldap
+        else
+            echo "Can't continue. Abort !"
+            exit -1
+        fi
+    fi
+
+    if [ -z "$PCS_TLS_GID" ]
+    then
+        echo "TLS group don't exist."
+        echo "You need first to negociate your domain certificate to use PCS Ldap feature. See pcs-certbot project"
+        exit -1
+    fi
+
+    if [ ! -d "${PCS_CERT_FOLDER}" ]
+    then
+        echo "${PCS_CERT_FOLDER} folder don't exist"
+        echo "You need first to negociate your domain certificate to use PCS Ldap feature. See pcs-certbot project"
+        exit -1
+    fi
+}
+
+function build() {
+	docker build -t ${NAME}:${VERSION} --rm \
+        --build-arg PCS_LDAP_UID=$(id -u openldap 2> /dev/null) \
+        --build-arg PCS_LDAP_GID=$(getent group openldap | cut -d ':' -f 3) \
+        --build-arg PCS_TLS_GID=$(getent group tls | cut -d ':' -f 3) \
+        .
+}
+
+function build-nocache(){
+	docker build -t ${NAME}:${VERSION} --no-cache --rm \
+        --build-arg PCS_LDAP_UID=$(id -u openldap 2> /dev/null) \
+        --build-arg PCS_LDAP_GID=$(getent group openldap | cut -d ':' -f 3) \
+        --build-arg PCS_TLS_GID=$(getent group tls | cut -d ':' -f 3) \
+        .
+}
+
+function password(){
+    if [ -z $(cat env_file | grep PCS_LDAP_ADM_PWD) ]
+    then
+	    echo First install, need to set-up password
+	    while [ -z "${PASS}" ]
+        do
+            read -r -p "Type LDAP DB admin password: " PASS
+        done
+	    SHA=$(docker run --rm ${NAME}:${VERSION} /usr/sbin/slappasswd -h {SSHA} -s ${PASS})
+	    echo -en "\nPCS_LDAP_ADM_PWD=$(echo $SHA | base64)\n" >> env_file 
+    fi
+}
+
+function run(){
+    password
+    # ! FIXME: remove tmp
+    docker run --rm -it -detach \
+	    --env-file env_file \
+        --mount type=bind,source=${PCS_CERT_FOLDER},target=/mnt/certs/ \
+        --mount type=volume,src=slapd-conf,dst=/etc/ldap/slapd.d/ \
+        --mount type=volume,src=slapd-db,dst=/var/lib/ldap/ \
+        -p 127.0.0.1:389:389/tcp \
+	    ${NAME}:${VERSION}
+}
+
+function run_it(){
+    # ! FIXME: remove tmp publish
+    docker run --rm -it -detach \
+	    --env-file env_file \
+        --mount type=bind,source=${PCS_CERT_FOLDER},target=/mnt/certs/ \
+        --mount type=volume,src=slapd-conf,dst=/etc/ldap/slapd.d/ \
+        --mount type=volume,src=slapd-db,dst=/var/lib/ldap/ \
+        -p 127.0.0.1:389:389/tcp \
+        --entrypoint "/bin/bash" \
+	    ${NAME}:${VERSION}
+}
+
+function stop(){
+    docker stop $(docker container ls | grep "${NAME}" | tr -s " " | cut -d ' ' -f1)
+}
+
+function attach()
+{
+    docker exec -it $(docker container ls | grep "${NAME}" | tr -s " " | cut -d ' ' -f1) "/bin/bash"
+}
+
+function release()
+{
+    git-tag-version: release
+	git tag -a v${VERSION} -m "v${VERSION}"
+	git push origin v${VERSION}
+}
+
+case $1 in
+    "build")
+        if [ "$2" == "force" ]
+        then
+            build-nocache
+        else
+            build
+        fi
+        ;;
+    "password")
+        password
+        ;;
+    "run")
+        if [ "$2" == "it" ]
+        then
+            run_it
+            attach
+        else
+            run
+        fi
+        ;;
+    "stop")
+        stop
+        ;;
+    "attach")
+        attach
+        ;;
+    *)
+        echo Command $1 not found !
+        ;;
+esac
