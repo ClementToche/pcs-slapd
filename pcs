@@ -96,7 +96,7 @@ function run(){
     # ! FIXME: remove tmp
     docker run --rm -it -detach \
 	    --env-file env_file \
-        --mount type=bind,source=${PCS_CERT_FOLDER},target=/mnt/certs/ \
+        --mount type=bind,source=${PCS_CERT_FOLDER},target=/mnt/certs/,readonly \
         --mount type=volume,src=slapd-conf,dst=/etc/ldap/slapd.d/ \
         --mount type=volume,src=slapd-db,dst=/var/lib/ldap/ \
         -p 127.0.0.1:389:389/tcp \
@@ -107,7 +107,7 @@ function run_it(){
     # ! FIXME: remove tmp publish
     docker run --rm -it -detach \
 	    --env-file env_file \
-        --mount type=bind,source=${PCS_CERT_FOLDER},target=/mnt/certs/ \
+        --mount type=bind,source=${PCS_CERT_FOLDER},target=/mnt/certs/,readonly \
         --mount type=volume,src=slapd-conf,dst=/etc/ldap/slapd.d/ \
         --mount type=volume,src=slapd-db,dst=/var/lib/ldap/ \
         -p 127.0.0.1:389:389/tcp \
