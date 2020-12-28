@@ -83,12 +83,14 @@ EOF
     while kill -0 ${slapd_pid} 2>/dev/null; do sleep 1; done
 }
 
-function checkDB(){
+function postRun(){
     pcs-logger info "TODO: Check DB"
     apt-get -y purge ldap-utils && apt-get -y autoremove && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* 
 }
 
 initDB
+
+postRun
 
 /usr/sbin/slapd -h "ldap:///" -g openldap -u openldap -F /etc/ldap/slapd.d
 
