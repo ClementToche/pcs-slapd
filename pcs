@@ -131,6 +131,8 @@ function release()
 	git push origin v${VERSION}
 }
 
+init-pcs
+
 case $1 in
     "build")
         if [ "$2" == "force" ]
